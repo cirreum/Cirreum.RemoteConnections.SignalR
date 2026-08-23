@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <File Path="../src/Directory.Build.props" />
+    <Project Path="../src/Cirreum.RemoteConnections.SignalR/Cirreum.RemoteConnections.SignalR.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <File Path="Directory.Build.props" />
+    <Project Path="Cirreum.RemoteConnections.SignalR.Tests/Cirreum.RemoteConnections.SignalR.Tests.csproj" />
+  </Folder>
+</Solution>

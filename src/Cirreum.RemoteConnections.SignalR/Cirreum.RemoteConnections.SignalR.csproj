@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AssemblyName>Cirreum.RemoteConnections.SignalR</AssemblyName>
+		<RootNamespace>Cirreum.RemoteServices</RootNamespace>
+		<Description>SignalR transport for Cirreum remote connections — a HubConnection-backed IRemoteConnection that owns connection lifetime, reconnect policy, access-token refresh, and observable connection state. Host-neutral: Blazor WASM clients and server-to-server callers use the same package.</Description>
+		<PackageTags>cirreum;signalr;realtime;websockets;client;remoteconnections</PackageTags>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Cirreum.Contracts (+ Kernel/Result) flow in transitively via Cirreum.Domain. -->
+		<PackageReference Include="Cirreum.Domain" Version="4.2.5" />
+
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Cirreum.RemoteServices" />
+	</ItemGroup>
+
+	<!-- InternalsVisibleTo: Local Development Only -->
+	<ItemGroup Label="InternalsVisibleTo" Condition="'$(IsLocalBuild)' == 'true'">
+		<InternalsVisibleTo Include="Cirreum.RemoteConnections.SignalR.Tests" />
+	</ItemGroup>
+
+</Project>
