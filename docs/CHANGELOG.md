@@ -21,3 +21,4 @@ Initial release of **Cirreum.RemoteConnections.SignalR**.
 - `CappedJitterRetryPolicy` — infinite reconnect with capped exponential backoff and jitter.
 - Access-token posture resolution feeding `HttpConnectionOptions.AccessTokenProvider`, so tokens refresh on every connect and reconnect attempt.
 - Protected `InvokeAsync<TResult>` and multi-argument `SendAsync` for hub methods that return values or take several parameters.
+- `SignalRRemoteConnectionContext.Create` builds the transport from `RemoteConnectionOptions`, validating the endpoint and reconnect settings at registration rather than at first connect, and exposing the native `IHubConnectionBuilder` through a configure delegate that runs last so an application can override anything the framework set.
