@@ -20,8 +20,71 @@ methods; the wire API stays native, reachable through a configure delegate.
 The package is host-neutral. A Blazor WASM client connecting to its backend and a server-side service
 subscribing to another service use the same type.
 
-Apps install the runtime extension, not this package directly:
-`Cirreum.Runtime.RemoteConnections.SignalR`.
+## Usage
+
+Derive a connection type. The framework-supplied context is its first constructor parameter;
+anything else resolves from the container as usual:
+
+```csharp
+public sealed class ChatConnection(SignalRRemoteConnectionContext context)
+    : SignalRRemoteConnection(context) {
+
+    public IDisposable OnMessage(Func<ChatMessage, Task> handler) =>
+        this.On("ReceiveMessage", handler);
+
+    // Fire-and-forget, one argument
+    public Task SendMessageAsync(ChatMessage message, CancellationToken ct = default) =>
+        this.SendAsync("SendMessage", message, ct);
+
+    // Several arguments
+    public Task SendToRoomAsync(string room, string text, CancellationToken ct = default) =>
+        this.SendAsync("SendToRoom", [room, text], ct);
+
+    // Request/response
+    public Task<string> StartConversationAsync(string context, CancellationToken ct = default) =>
+        this.InvokeAsync<string>("StartConversation", [context], ct);
+
+}
+```
+
+Register it, and connect when the caller is ready — typically after sign-in, not at startup:
+
+```csharp
+services.AddSingleton(sp => new ChatConnection(
+    SignalRRemoteConnectionContext.Create(sp, new RemoteConnectionOptions("MyApp") {
+        EndpointUri = new Uri("https://api.example.com/hubs/chat")
+    })));
+
+// Optional: expose it for status surfaces that render every connection's state
+services.AddSingleton<IRemoteConnection>(sp => sp.GetRequiredService<ChatConnection>());
+```
+
+```csharp
+await connection.ConnectAsync();
+```
+
+## What the base owns
+
+- **Lifetime** — `ConnectAsync` is idempotent and coalesces concurrent callers; `DisposeAsync`
+  stops and releases the transport once.
+- **State** — `State` and `StateChanged` report `Connecting` / `Connected` / `Reconnecting` /
+  `Disconnecting` / `Disconnected`, for binding spinners, toasts and offline banners.
+- **Identity** — `ConnectionId` is assigned by the adapter and stable for the connection's life,
+  including across reconnects. The transport's own identifier, which changes on every reconnect,
+  is `ServerConnectionId`.
+- **Reconnection** — retries indefinitely with capped, jittered backoff. SignalR's own default
+  stops after four attempts, which strands a connection a user expects to stay open. Override
+  `OnReconnectedAsync` to restore server-side session state that does not survive a reconnect,
+  such as group membership.
+- **Credentials** — resolved on every connect *and reconnect* attempt, so a token refreshes with
+  no application code. Postures resolve in order: an explicit callback on the options, an explicit
+  authorization header, an explicit choice to connect without credentials, then an ambient
+  `IRemoteConnectionTokenSource`. With none of those available the connection fails rather than
+  connecting anonymously.
+
+Anything the transport offers beyond this surface — streaming, for instance — is reachable through
+the protected `HubConnection`, and the native `IHubConnectionBuilder` is exposed through a configure
+delegate that runs last, so an application can override anything the framework set.
 
 ## Documentation
 

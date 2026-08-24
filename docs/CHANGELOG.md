@@ -16,7 +16,9 @@ Initial release of **Cirreum.RemoteConnections.SignalR**.
 
 ### Added
 
-- `SignalRRemoteConnection` — abstract `HubConnection`-backed `IRemoteConnection`. Owns connect/disconnect, state transitions, reconnect, and disposal; derived classes expose typed methods over the hub surface.
+- `SignalRRemoteConnection` — abstract `HubConnection`-backed `IRemoteConnection`. Owns connect/disconnect, state transitions, reconnect, and disposal; derived classes expose typed methods over the hub surface. `ConnectAsync` is idempotent and coalesces concurrent callers.
+- `ConnectionId` is adapter-assigned and stable for the connection's life, including across reconnects, as the contract promises; the transport's own identifier changes on every reconnect and is exposed separately as `ServerConnectionId` for correlating with server logs.
+- `OnConnectedAsync` / `OnReconnectedAsync` lifecycle hooks run before the connection reports `Connected`, so server-side state that does not survive a transport reconnect — group membership, presence — has a defined place to be restored.
 - `SignalRRemoteConnectionContext` — framework-constructed carrier passed to derived connections, so the framework can add dependencies without changing consumer constructors.
 - `CappedJitterRetryPolicy` — infinite reconnect with capped exponential backoff and jitter.
 - Access-token posture resolution feeding `HttpConnectionOptions.AccessTokenProvider`, so tokens refresh on every connect and reconnect attempt.
