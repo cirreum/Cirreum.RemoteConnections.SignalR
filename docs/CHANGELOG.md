@@ -12,6 +12,48 @@ guides linked at the bottom of each entry.
 
 ## [Unreleased]
 
+### Breaking
+
+* **The connection types move to `Cirreum.RemoteServices.Connections`**, following
+  `Cirreum.Contracts` 5.0.0 and `Cirreum.Domain` 5.0.0. A service is something you call; a
+  connection is something you hold open, so it nests rather than sitting alongside.
+
+* **`SignalRRemoteConnectionContext.Create` is generic**:
+  `Create<TConnection>(services, options, configureTransport)`. The credential source may be
+  registered against the connection's type, and the transport is where the source is resolved, so
+  the type has to reach it. Applications composing a context by hand name the connection type they
+  are building.
+
+* **The credential seam follows `Cirreum.Contracts` 5.0.0.** The ambient source is
+  `IRemoteConnectionCredentialSource`, resolved with a `RemoteConnectionTokenRequest` and returning
+  `AuthorizationHeaderSettings?`; the per-connection callback is `RemoteConnectionOptions.CredentialProvider`.
+
+  A resolved credential now has three answers. A value is presented. `AuthorizationHeaderSettings.None`
+  connects deliberately without one. `null` means none is available and **fails the connect** — a
+  change from 1.0, where a source returning nothing connected anonymously and the server refused the
+  request later, which reads as an application authentication bug.
+
+### Added
+
+* **`On<T1,T2>` through `On<T1..T8>`** — SignalR's protocol carries an argument array, so a hub
+  declaring a client method with several parameters invokes it with several arguments. `On<T>` alone
+  could not receive those messages, and an application had to drop to the protected `HubConnection`.
+
+* **A non-generic `InvokeAsync`** for a hub method that returns no value, completing when the hub
+  method does. `SendAsync` returns once the message is sent, and `InvokeAsync<TResult>` requires a
+  result type, so there was no way to await server acceptance alone.
+
+* **A credential source may be registered keyed to a connection type**, and is preferred over the
+  unkeyed registration for that connection — so one connection can use a different mechanism or
+  identity provider than another.
+
+* **`RemoteConnectionOptions.Scopes` reaches the source**, which is what lets a host mint a token
+  for the audience the application named rather than for its own defaults.
+
+### Updated
+
+- `Cirreum.Domain` 5.0.0.
+
 ### Updated
 
 - Updated NuGet packages.

@@ -6,10 +6,21 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 public class RemoteConnectionCredentialsTests {
 
+	// ---------------------------------------------------------------------
+	// Harness
+	// ---------------------------------------------------------------------
+
+	private sealed class TestConnection;
+
+	private sealed class OtherConnection;
+
 	private static RemoteConnectionOptions Options() =>
 		new("TestApp", new Uri("https://example.test/hub"));
 
-	private static IServiceProvider Services(IRemoteConnectionTokenSource? source = null) {
+	private static AuthorizationHeaderSettings Bearer(string value) =>
+		new() { Scheme = "Bearer", Value = value };
+
+	private static IServiceProvider Services(IRemoteConnectionCredentialSource? source = null) {
 		var services = new ServiceCollection();
 		if (source is not null) {
 			services.AddSingleton(source);
@@ -19,39 +30,56 @@ public class RemoteConnectionCredentialsTests {
 
 	private static HttpConnectionOptions Apply(
 		RemoteConnectionOptions options,
-		IRemoteConnectionTokenSource? source = null) {
+		IRemoteConnectionCredentialSource? source = null) {
+
+		return Apply(options, Services(source));
+
+	}
+
+	private static HttpConnectionOptions Apply(RemoteConnectionOptions options, IServiceProvider services) {
 
 		var httpOptions = new HttpConnectionOptions();
 		RemoteConnectionCredentials.Apply(
-			httpOptions, options, Services(source), NullLogger.Instance, "test-connection");
+			httpOptions, options, typeof(TestConnection), services, NullLogger.Instance, "test-connection");
 		return httpOptions;
+
 	}
 
-	private sealed class StubTokenSource(string? token) : IRemoteConnectionTokenSource {
-		public ValueTask<string?> GetAccessTokenAsync(CancellationToken cancellationToken = default) =>
-			ValueTask.FromResult(token);
+	private sealed class StubSource(AuthorizationHeaderSettings? credential) : IRemoteConnectionCredentialSource {
+
+		public RemoteConnectionTokenRequest? LastRequest { get; private set; }
+
+		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
+			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) {
+
+			this.LastRequest = request;
+			return ValueTask.FromResult(credential);
+
+		}
+
 	}
 
-	// Posture precedence ————————————————————————————————————————
+	// ---------------------------------------------------------------------
+	// Posture precedence
+	// ---------------------------------------------------------------------
 
 	[Fact]
 	public async Task ExplicitCallback_WinsOverEverything() {
 		var options = Options();
-		options.AccessTokenProvider = _ => ValueTask.FromResult<string?>("from-callback");
-		options.AuthorizationHeader = new AuthorizationHeaderSettings { Scheme = "Bearer", Value = "from-header" };
+		options.CredentialProvider = _ => ValueTask.FromResult<AuthorizationHeaderSettings?>(Bearer("from-callback"));
+		options.AuthorizationHeader = Bearer("from-header");
 
-		var httpOptions = Apply(options, new StubTokenSource("from-source"));
+		var httpOptions = Apply(options, new StubSource(Bearer("from-source")));
 
-		httpOptions.AccessTokenProvider.Should().NotBeNull();
 		(await httpOptions.AccessTokenProvider!()).Should().Be("from-callback");
 	}
 
 	[Fact]
 	public async Task BearerHeader_WinsOverAmbientSource() {
 		var options = Options();
-		options.AuthorizationHeader = new AuthorizationHeaderSettings { Scheme = "Bearer", Value = "static-token" };
+		options.AuthorizationHeader = Bearer("static-token");
 
-		var httpOptions = Apply(options, new StubTokenSource("from-source"));
+		var httpOptions = Apply(options, new StubSource(Bearer("from-source")));
 
 		(await httpOptions.AccessTokenProvider!()).Should().Be("static-token");
 		httpOptions.Headers.Should().NotContainKey("Authorization");
@@ -60,22 +88,16 @@ public class RemoteConnectionCredentialsTests {
 	[Fact]
 	public async Task PrefixedBearerToken_IsPresentedVerbatim() {
 		// A scheme prefix is part of the opaque secret the issuer minted, stored and will look
-		// the credential up by - not a wrapper the client adds or removes. Constructing or
-		// prepending one here would present a value the server never stored.
+		// the credential up by - not a wrapper the client adds or removes.
 		var options = Options();
-		options.AuthorizationHeader = new AuthorizationHeaderSettings {
-			Scheme = "Bearer",
-			Value = "st_prod_a1b2c3d4"
-		};
+		options.AuthorizationHeader = Bearer("st_prod_a1b2c3d4");
 
-		var httpOptions = Apply(options);
-
-		(await httpOptions.AccessTokenProvider!()).Should().Be("st_prod_a1b2c3d4");
+		(await Apply(options).AccessTokenProvider!()).Should().Be("st_prod_a1b2c3d4");
 	}
 
 	[Fact]
 	public async Task PrefixedTokenFromTheAmbientSource_IsPresentedVerbatim() {
-		var httpOptions = Apply(Options(), new StubTokenSource("ak_prod_9f8e7d6c"));
+		var httpOptions = Apply(Options(), new StubSource(Bearer("ak_prod_9f8e7d6c")));
 
 		(await httpOptions.AccessTokenProvider!()).Should().Be("ak_prod_9f8e7d6c");
 	}
@@ -96,7 +118,7 @@ public class RemoteConnectionCredentialsTests {
 		var options = Options();
 		options.AuthorizationHeader = AuthorizationHeaderSettings.None;
 
-		var httpOptions = Apply(options, new StubTokenSource("from-source"));
+		var httpOptions = Apply(options, new StubSource(Bearer("from-source")));
 
 		httpOptions.AccessTokenProvider.Should().BeNull();
 		httpOptions.Headers.Should().NotContainKey("Authorization");
@@ -104,33 +126,135 @@ public class RemoteConnectionCredentialsTests {
 
 	[Fact]
 	public async Task NoExplicitPosture_UsesAmbientSource() {
-		var httpOptions = Apply(Options(), new StubTokenSource("from-source"));
+		var httpOptions = Apply(Options(), new StubSource(Bearer("from-source")));
 
 		(await httpOptions.AccessTokenProvider!()).Should().Be("from-source");
+	}
+
+	// ---------------------------------------------------------------------
+	// What the source is told
+	// ---------------------------------------------------------------------
+
+	[Fact]
+	public async Task TheSourceIsToldTheConnectionItIsSupplyingFor() {
+		var options = Options();
+		options.Scopes = ["api://contoso/access_as_user"];
+		var source = new StubSource(Bearer("token"));
+
+		await Apply(options, source).AccessTokenProvider!();
+
+		source.LastRequest.Should().NotBeNull();
+		source.LastRequest!.EndpointUri.Should().Be(new Uri("https://example.test/hub"));
+		source.LastRequest.Scopes.Should().Equal("api://contoso/access_as_user");
+		source.LastRequest.ConnectionType.Should().Be<TestConnection>();
+	}
+
+	[Fact]
+	public async Task DeclaringNoScopes_ReachesTheSourceAsEmptyNotNull() {
+		var source = new StubSource(Bearer("token"));
+
+		await Apply(Options(), source).AccessTokenProvider!();
+
+		source.LastRequest!.Scopes.Should().BeEmpty();
+	}
+
+	// ---------------------------------------------------------------------
+	// Source selection
+	// ---------------------------------------------------------------------
+
+	[Fact]
+	public async Task ASourceKeyedToTheConnectionType_WinsOverTheUnkeyedOne() {
+		var services = new ServiceCollection()
+			.AddSingleton<IRemoteConnectionCredentialSource>(new StubSource(Bearer("ambient")))
+			.AddKeyedSingleton<IRemoteConnectionCredentialSource>(
+				typeof(TestConnection), (_, _) => new StubSource(Bearer("keyed")))
+			.BuildServiceProvider();
+
+		(await Apply(Options(), services).AccessTokenProvider!()).Should().Be("keyed");
+	}
+
+	[Fact]
+	public async Task ASourceKeyedToAnotherConnection_IsNotUsed() {
+		var services = new ServiceCollection()
+			.AddSingleton<IRemoteConnectionCredentialSource>(new StubSource(Bearer("ambient")))
+			.AddKeyedSingleton<IRemoteConnectionCredentialSource>(
+				typeof(OtherConnection), (_, _) => new StubSource(Bearer("keyed")))
+			.BuildServiceProvider();
+
+		(await Apply(Options(), services).AccessTokenProvider!()).Should().Be("ambient");
+	}
+
+	[Fact]
+	public async Task AKeyedSourceAlone_IsUsedWithNoUnkeyedFallbackRegistered() {
+		var services = new ServiceCollection()
+			.AddKeyedSingleton<IRemoteConnectionCredentialSource>(
+				typeof(TestConnection), (_, _) => new StubSource(Bearer("keyed")))
+			.BuildServiceProvider();
+
+		(await Apply(Options(), services).AccessTokenProvider!()).Should().Be("keyed");
 	}
 
 	[Fact]
 	public async Task AmbientSource_IsResolvedPerAttemptNotCaptured() {
 		var calls = 0;
 		var services = new ServiceCollection()
-			.AddSingleton<IRemoteConnectionTokenSource>(_ => new CountingSource(() => ++calls))
+			.AddSingleton<IRemoteConnectionCredentialSource>(_ => new CountingSource(() => ++calls))
 			.BuildServiceProvider();
 
-		var httpOptions = new HttpConnectionOptions();
-		RemoteConnectionCredentials.Apply(
-			httpOptions, Options(), services, NullLogger.Instance, "test-connection");
+		var httpOptions = Apply(Options(), services);
 
 		(await httpOptions.AccessTokenProvider!()).Should().Be("token-1");
 		(await httpOptions.AccessTokenProvider!()).Should().Be("token-2");
-		calls.Should().Be(2, "a reconnect must re-read the token rather than reuse a captured one");
+		calls.Should().Be(2, "a reconnect must re-read the credential rather than reuse a captured one");
 	}
 
-	private sealed class CountingSource(Func<int> next) : IRemoteConnectionTokenSource {
-		public ValueTask<string?> GetAccessTokenAsync(CancellationToken cancellationToken = default) =>
-			ValueTask.FromResult<string?>($"token-{next()}");
+	private sealed class CountingSource(Func<int> next) : IRemoteConnectionCredentialSource {
+		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
+			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) =>
+			ValueTask.FromResult<AuthorizationHeaderSettings?>(
+				new AuthorizationHeaderSettings { Scheme = "Bearer", Value = $"token-{next()}" });
 	}
 
-	// Fail closed ———————————————————————————————————————————————
+	// ---------------------------------------------------------------------
+	// A resolved credential's three answers
+	// ---------------------------------------------------------------------
+
+	[Fact]
+	public async Task ASourceReturningNone_ConnectsWithoutACredential() {
+		var httpOptions = Apply(Options(), new StubSource(AuthorizationHeaderSettings.None));
+
+		(await httpOptions.AccessTokenProvider!()).Should().BeNull();
+		httpOptions.Headers.Should().NotContainKey("Authorization");
+	}
+
+	[Fact]
+	public async Task ASourceReturningNull_FailsRatherThanConnectingAnonymously() {
+		// Null means no credential is available. Connecting anyway would present an anonymous
+		// request that the server refuses later, which reads as an application auth bug.
+		var httpOptions = Apply(Options(), new StubSource(null));
+
+		var act = async () => await httpOptions.AccessTokenProvider!();
+
+		(await act.Should().ThrowAsync<InvalidOperationException>())
+			.WithMessage("*No credential was supplied*")
+			.WithMessage("*https://example.test/hub*");
+	}
+
+	[Fact]
+	public async Task ANonBearerCredentialFromASource_TravelsAsAHeader() {
+		var credential = new AuthorizationHeaderSettings { Scheme = "ApiKey", Value = "abc123" };
+
+		var httpOptions = Apply(Options(), new StubSource(credential));
+
+		// SignalR's own token path is bearer-only, so any other scheme is written to the request
+		// headers and no bearer token is yielded - the two must not both apply.
+		(await httpOptions.AccessTokenProvider!()).Should().BeNull();
+		httpOptions.Headers["Authorization"].Should().Be("ApiKey abc123");
+	}
+
+	// ---------------------------------------------------------------------
+	// Fail closed
+	// ---------------------------------------------------------------------
 
 	[Fact]
 	public async Task NoPostureAndNoRegisteredSource_ThrowsOnResolve() {
@@ -145,14 +269,9 @@ public class RemoteConnectionCredentialsTests {
 			.WithMessage("*https://example.test/hub*");
 	}
 
-	[Fact]
-	public async Task AmbientSourceReturningNull_IsPassedThroughNotSubstituted() {
-		var httpOptions = Apply(Options(), new StubTokenSource(null));
-
-		(await httpOptions.AccessTokenProvider!()).Should().BeNull();
-	}
-
-	// Application name ——————————————————————————————————————————
+	// ---------------------------------------------------------------------
+	// Application name
+	// ---------------------------------------------------------------------
 
 	[Fact]
 	public void ApplicationName_TravelsAsAHeader() {
@@ -161,9 +280,6 @@ public class RemoteConnectionCredentialsTests {
 
 	[Fact]
 	public void BlankApplicationName_SendsNoHeader() {
-		var options = new RemoteConnectionOptions { EndpointUri = new Uri("https://example.test/hub") };
-		options.ApplicationName.Should().NotBeNullOrWhiteSpace("the parameterless ctor derives one");
-
 		var explicitlyBlank = new RemoteConnectionOptions("") { EndpointUri = new Uri("https://example.test/hub") };
 
 		Apply(explicitlyBlank).Headers.Should().NotContainKey(RemoteIdentityConstants.AppNameHeader);

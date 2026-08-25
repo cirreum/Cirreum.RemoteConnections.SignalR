@@ -1,4 +1,4 @@
-namespace Cirreum.RemoteServices;
+﻿namespace Cirreum.RemoteServices.Connections;
 
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
@@ -40,17 +40,21 @@ public sealed class SignalRRemoteConnectionContext {
 	/// <summary>
 	/// Build a context for a connection to the endpoint described by <paramref name="options"/>.
 	/// </summary>
+	/// <typeparam name="TConnection">
+	/// The connection type being built, which a credential source may be registered against.
+	/// </typeparam>
 	/// <param name="services">The provider used to resolve the logger and, where the options
-	/// do not specify credentials, the ambient <see cref="IRemoteConnectionTokenSource"/>.</param>
+	/// do not specify credentials, the ambient <see cref="IRemoteConnectionCredentialSource"/>.</param>
 	/// <param name="options">The connection's options. The endpoint must be an absolute Uri.</param>
 	/// <param name="configureTransport">
 	/// An optional delegate applied to the underlying <see cref="IHubConnectionBuilder"/> after
 	/// the framework has configured it, so that any transport setting may be overridden.
 	/// </param>
-	public static SignalRRemoteConnectionContext Create(
+	public static SignalRRemoteConnectionContext Create<TConnection>(
 		IServiceProvider services,
 		RemoteConnectionOptions options,
-		Action<IHubConnectionBuilder>? configureTransport = null) {
+		Action<IHubConnectionBuilder>? configureTransport = null)
+		where TConnection : SignalRRemoteConnection {
 
 		ArgumentNullException.ThrowIfNull(services);
 		ArgumentNullException.ThrowIfNull(options);
@@ -79,7 +83,8 @@ public sealed class SignalRRemoteConnectionContext {
 
 		var hubBuilder = new HubConnectionBuilder()
 			.WithUrl(options.EndpointUri, httpOptions =>
-				RemoteConnectionCredentials.Apply(httpOptions, options, services, logger, connectionId));
+				RemoteConnectionCredentials.Apply(
+					httpOptions, options, typeof(TConnection), services, logger, connectionId));
 
 		if (options.Reconnect) {
 			hubBuilder = hubBuilder.WithAutomaticReconnect(new CappedJitterRetryPolicy(options.ReconnectMaxDelay));

@@ -1,4 +1,4 @@
-namespace Cirreum.RemoteServices;
+﻿namespace Cirreum.RemoteServices.Connections;
 
 using Microsoft.AspNetCore.SignalR.Client;
 

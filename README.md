@@ -13,7 +13,7 @@
 **Cirreum.RemoteConnections.SignalR** is the SignalR implementation of Cirreum's `IRemoteConnection` abstraction — a typed, lifecycle-managed client connection backed by `HubConnection`.
 
 The framework owns the concerns that otherwise drift between applications: DI lifetime, reconnect
-policy, access-token acquisition and refresh across reconnects, observable connection state for UI
+policy, credential acquisition and refresh across reconnects, observable connection state for UI
 binding, and deterministic disposal. Applications write a derived connection type exposing typed
 methods; the wire API stays native, reachable through a configure delegate.
 
@@ -36,6 +36,10 @@ public sealed class ChatConnection(SignalRRemoteConnectionContext context)
     public Task SendMessageAsync(ChatMessage message, CancellationToken ct = default) =>
         this.SendAsync("SendMessage", message, ct);
 
+    // A client method the hub invokes with several arguments
+    public IDisposable OnToolComplete(Func<string, bool, Task> handler) =>
+        this.On("ReceiveToolComplete", handler);
+
     // Several arguments
     public Task SendToRoomAsync(string room, string text, CancellationToken ct = default) =>
         this.SendAsync("SendToRoom", [room, text], ct);
@@ -51,8 +55,9 @@ Register it:
 
 ```csharp
 services.AddSingleton(sp => new ChatConnection(
-    SignalRRemoteConnectionContext.Create(sp, new RemoteConnectionOptions("MyApp") {
-        EndpointUri = new Uri("https://api.example.com/hubs/chat")
+    SignalRRemoteConnectionContext.Create<ChatConnection>(sp, new RemoteConnectionOptions("MyApp") {
+        EndpointUri = new Uri("https://api.example.com/hubs/chat"),
+        Scopes = ["api://contoso/access_as_user"],
     })));
 
 // Optional: expose it for status surfaces that render every connection's state
@@ -84,11 +89,32 @@ await connection.ConnectAsync();
   stops after four attempts, which strands a connection a user expects to stay open. Override
   `OnReconnectedAsync` to restore server-side session state that does not survive a reconnect,
   such as group membership.
-- **Credentials** — resolved on every connect *and reconnect* attempt, so a token refreshes with
-  no application code. Postures resolve in order: an explicit callback on the options, an explicit
-  authorization header, an explicit choice to connect without credentials, then an ambient
-  `IRemoteConnectionTokenSource`. With none of those available the connection fails rather than
-  connecting anonymously.
+- **Credentials** — resolved on every connect *and reconnect* attempt, so a credential refreshes
+  with no application code. Postures resolve in a fixed order, and the first one set wins:
+
+  | # | Posture | Set by |
+  |---|---|---|
+  | 1 | `CredentialProvider` | a callback on the connection's options |
+  | 2 | `AuthorizationHeader` carrying a value | the connection's options |
+  | 3 | `AuthorizationHeaderSettings.None` | the connection's options, to connect deliberately without one |
+  | 4 | the ambient `IRemoteConnectionCredentialSource` | the host runtime, or the application |
+
+  The ambient source is told what it is supplying for — endpoint, the `Scopes` the options declare,
+  and the connection type — and a source registered *keyed* to that type is preferred over the
+  unkeyed one, so one connection can use a different mechanism than another.
+
+  A resolved credential has three answers: a value to present, `None` to connect without one, and
+  `null` meaning none is available — which fails the connect rather than connecting anonymously.
+
+  A bearer credential rides SignalR's own token path, so it travels as a header where the transport
+  can carry one and as an `access_token` query parameter where it cannot. Any other scheme travels
+  as a header only, which a browser cannot set on a WebSocket upgrade.
+
+- **Callbacks** — `On<T>` binds a single argument, and `On<T1,T2>` through `On<T1..T8>` bind the
+  rest: SignalR's protocol carries an argument array, so a hub declaring a client method with
+  several parameters invokes it with several arguments.
+- **Invocation** — `InvokeAsync<TResult>` awaits a result; `InvokeAsync` awaits a hub method that
+  returns none, which `SendAsync` cannot do since it completes once the message is sent.
 
 Anything the transport offers beyond this surface — streaming, for instance — is reachable through
 the protected `HubConnection`, and the native `IHubConnectionBuilder` is exposed through a configure

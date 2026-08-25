@@ -36,8 +36,18 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		public Task Combine(string left, string right) =>
 			this.Clients.Caller.SendAsync("Heard", $"{left}|{right}");
 
+		public Task Split(string left, int right) =>
+			this.Clients.Caller.SendAsync("Parted", left, right);
+
 		public Task<string> Identify(string prefix) =>
 			Task.FromResult($"{prefix}:{this.Context.ConnectionId}");
+
+		public Task Acknowledge(string note) {
+			Acknowledged.Add(note);
+			return Task.CompletedTask;
+		}
+
+		internal static readonly ConcurrentBag<string> Acknowledged = [];
 
 		public Task Boom() => throw new HubException("boom");
 
@@ -51,6 +61,14 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		public int ReconnectedHookCalls;
 
 		public IDisposable OnHeard(Func<string, Task> handler) => this.On("Heard", handler);
+
+		public IDisposable OnParted(Func<string, int, Task> handler) => this.On("Parted", handler);
+
+		public Task SplitAsync(string left, int right, CancellationToken ct = default) =>
+			this.SendAsync("Split", [left, right], ct);
+
+		public Task AcknowledgeAsync(string note, CancellationToken ct = default) =>
+			this.InvokeAsync("Acknowledge", [note], ct);
 
 		public Task ShoutAsync(string message, CancellationToken ct = default) =>
 			this.SendAsync("Shout", message, ct);
@@ -133,7 +151,7 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		var faultSwitch = new FaultSwitch();
 		fault = faultSwitch;
 
-		var context = SignalRRemoteConnectionContext.Create(
+		var context = SignalRRemoteConnectionContext.Create<EchoConnection>(
 			new ServiceCollection().BuildServiceProvider(),
 			options,
 			builder => builder.WithUrl(options.EndpointUri, http => {
@@ -174,6 +192,39 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		await connection.CombineAsync("left", "right");
 
 		(await WaitForAsync(heard)).Should().Be("left|right");
+	}
+
+	[Fact]
+	public async Task MultiArgumentCallback_BindsBothArguments() {
+
+		// SignalR's protocol carries an argument array, so a hub declaring a client method with
+		// two parameters invokes it with two. On<T> alone cannot receive that message.
+		await using var connection = this.CreateConnection(out _);
+		var received = new TaskCompletionSource<(string, int)>();
+		using var subscription = connection.OnParted((left, right) => {
+			received.TrySetResult((left, right));
+			return Task.CompletedTask;
+		});
+
+		await connection.ConnectAsync();
+		await connection.SplitAsync("alpha", 42);
+
+		var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+		result.Should().Be(("alpha", 42));
+
+	}
+
+	[Fact]
+	public async Task NonGenericInvoke_AwaitsTheHubMethodWithNoResult() {
+
+		await using var connection = this.CreateConnection(out _);
+		await connection.ConnectAsync();
+
+		await connection.AcknowledgeAsync("noted");
+
+		// Completing means the hub method ran, which SendAsync could not have told us.
+		EchoHub.Acknowledged.Should().Contain("noted");
+
 	}
 
 	[Fact]

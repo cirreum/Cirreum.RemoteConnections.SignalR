@@ -6,8 +6,11 @@ public class SignalRRemoteConnectionContextTests {
 
 	private static IServiceProvider Services() => new ServiceCollection().BuildServiceProvider();
 
+	private sealed class StubConnection(SignalRRemoteConnectionContext context)
+		: SignalRRemoteConnection(context);
+
 	private static SignalRRemoteConnectionContext Create(RemoteConnectionOptions options) =>
-		SignalRRemoteConnectionContext.Create(Services(), options);
+		SignalRRemoteConnectionContext.Create<StubConnection>(Services(), options);
 
 	// Validation happens at registration, not at first connect ————————
 
@@ -46,10 +49,10 @@ public class SignalRRemoteConnectionContextTests {
 	public void NullArguments_AreRejected() {
 		var options = new RemoteConnectionOptions("App", new Uri("https://example.test/hub"));
 
-		((Action)(() => SignalRRemoteConnectionContext.Create(null!, options)))
+		((Action)(() => SignalRRemoteConnectionContext.Create<StubConnection>(null!, options)))
 			.Should().Throw<ArgumentNullException>();
 
-		((Action)(() => SignalRRemoteConnectionContext.Create(Services(), null!)))
+		((Action)(() => SignalRRemoteConnectionContext.Create<StubConnection>(Services(), null!)))
 			.Should().Throw<ArgumentNullException>();
 	}
 
@@ -79,7 +82,7 @@ public class SignalRRemoteConnectionContextTests {
 		var options = new RemoteConnectionOptions("App", new Uri("https://example.test/hub"));
 		var invoked = false;
 
-		var context = SignalRRemoteConnectionContext.Create(
+		var context = SignalRRemoteConnectionContext.Create<StubConnection>(
 			Services(), options, _ => invoked = true);
 
 		invoked.Should().BeTrue();

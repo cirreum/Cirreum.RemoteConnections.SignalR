@@ -1,4 +1,4 @@
-namespace Cirreum.RemoteServices;
+﻿namespace Cirreum.RemoteServices.Connections;
 
 using Microsoft.AspNetCore.SignalR.Client;
 
@@ -110,6 +110,12 @@ public abstract class SignalRRemoteConnection : RemoteConnectionBase, IAsyncDisp
 		}
 	}
 
+
+	// SignalR's protocol carries an argument array, so a hub declaring a client method with
+	// several parameters invokes it with several arguments. These bind them. The neutral
+	// contract carries only the single-argument form, which is the shape every transport can
+	// honour.
+
 	/// <inheritdoc/>
 	/// <remarks>
 	/// Valid in any state. The transport holds registrations independently of connectivity, so
@@ -121,6 +127,133 @@ public abstract class SignalRRemoteConnection : RemoteConnectionBase, IAsyncDisp
 
 		return this.HubConnection.On(method, handler);
 	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 2 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2>(string method, Func<T1, T2, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 3 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3>(string method, Func<T1, T2, T3, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 4 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <typeparam name="T4">The type of argument 4.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3, T4>(string method, Func<T1, T2, T3, T4, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 5 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <typeparam name="T4">The type of argument 4.</typeparam>
+	/// <typeparam name="T5">The type of argument 5.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3, T4, T5>(string method, Func<T1, T2, T3, T4, T5, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 6 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <typeparam name="T4">The type of argument 4.</typeparam>
+	/// <typeparam name="T5">The type of argument 5.</typeparam>
+	/// <typeparam name="T6">The type of argument 6.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3, T4, T5, T6>(string method, Func<T1, T2, T3, T4, T5, T6, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 7 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <typeparam name="T4">The type of argument 4.</typeparam>
+	/// <typeparam name="T5">The type of argument 5.</typeparam>
+	/// <typeparam name="T6">The type of argument 6.</typeparam>
+	/// <typeparam name="T7">The type of argument 7.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3, T4, T5, T6, T7>(string method, Func<T1, T2, T3, T4, T5, T6, T7, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
+	/// <summary>
+	/// Register a handler for a client method the hub invokes with 8 arguments.
+	/// </summary>
+	/// <typeparam name="T1">The type of argument 1.</typeparam>
+	/// <typeparam name="T2">The type of argument 2.</typeparam>
+	/// <typeparam name="T3">The type of argument 3.</typeparam>
+	/// <typeparam name="T4">The type of argument 4.</typeparam>
+	/// <typeparam name="T5">The type of argument 5.</typeparam>
+	/// <typeparam name="T6">The type of argument 6.</typeparam>
+	/// <typeparam name="T7">The type of argument 7.</typeparam>
+	/// <typeparam name="T8">The type of argument 8.</typeparam>
+	/// <param name="method">The client method name, as the hub invokes it.</param>
+	/// <param name="handler">The handler invoked for each message.</param>
+	/// <returns>A subscription that removes the handler when disposed.</returns>
+	public IDisposable On<T1, T2, T3, T4, T5, T6, T7, T8>(string method, Func<T1, T2, T3, T4, T5, T6, T7, T8, Task> handler) {
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(handler);
+
+		return this.HubConnection.On(method, handler);
+	}
+
 
 	/// <inheritdoc/>
 	/// <remarks>
@@ -153,6 +286,7 @@ public abstract class SignalRRemoteConnection : RemoteConnectionBase, IAsyncDisp
 		return this.HubConnection.SendCoreAsync(method, args, cancellationToken);
 	}
 
+
 	/// <summary>
 	/// Invoke a hub method and await its return value.
 	/// </summary>
@@ -175,6 +309,30 @@ public abstract class SignalRRemoteConnection : RemoteConnectionBase, IAsyncDisp
 
 		return this.HubConnection.InvokeCoreAsync<TResult>(method, args, cancellationToken);
 	}
+
+	/// <summary>
+	/// Invoke a hub method that returns no value, and await the hub's completion of it.
+	/// </summary>
+	/// <param name="method">The hub method name.</param>
+	/// <param name="args">The method's arguments, in declaration order.</param>
+	/// <param name="cancellationToken">Cancellation token for the invocation.</param>
+	/// <remarks>
+	/// Differs from <see cref="SendAsync(string, object?[], CancellationToken)"/>, which returns
+	/// once the message is sent: this completes when the hub method does, and faults with the
+	/// transport's own exception when it throws.
+	/// </remarks>
+	protected Task InvokeAsync(
+		string method,
+		object?[] args,
+		CancellationToken cancellationToken = default) {
+
+		ArgumentException.ThrowIfNullOrWhiteSpace(method);
+		ArgumentNullException.ThrowIfNull(args);
+		ObjectDisposedException.ThrowIf(this._disposed, this);
+
+		return this.HubConnection.InvokeCoreAsync(method, args, cancellationToken);
+	}
+
 
 	/// <inheritdoc/>
 	public async ValueTask DisposeAsync() {
