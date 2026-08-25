@@ -107,8 +107,14 @@ await connection.ConnectAsync();
   `null` meaning none is available — which fails the connect rather than connecting anonymously.
 
   A bearer credential rides SignalR's own token path, so it travels as a header where the transport
-  can carry one and as an `access_token` query parameter where it cannot. Any other scheme travels
-  as a header only, which a browser cannot set on a WebSocket upgrade.
+  can carry one and as an `access_token` query parameter where it cannot, and it is re-resolved on
+  every attempt.
+
+  Any other scheme must be a **static** `AuthorizationHeader`: the transport copies its configured
+  headers when it builds the client for an attempt, before the credential callback runs, so a
+  non-Bearer credential resolved per attempt would reach no request. Returning one from a callback
+  or a source is rejected rather than silently dropped. A non-Bearer header also travels as a header
+  only, which a browser cannot set on a WebSocket upgrade.
 
 - **Callbacks** — `On<T>` binds a single argument, and `On<T1,T2>` through `On<T1..T8>` bind the
   rest: SignalR's protocol carries an argument array, so a hub declaring a client method with
