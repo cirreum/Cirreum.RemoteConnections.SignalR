@@ -241,15 +241,19 @@ public class RemoteConnectionCredentialsTests {
 	}
 
 	[Fact]
-	public async Task ANonBearerCredentialFromASource_TravelsAsAHeader() {
+	public async Task ANonBearerCredentialFromASource_IsRejectedRatherThanDropped() {
+		// The transport copies its configured headers when it builds the client for an attempt,
+		// before the credential is resolved, so a header written at resolve time reaches no
+		// request. Silently attaching nothing is what this refuses to do.
 		var credential = new AuthorizationHeaderSettings { Scheme = "ApiKey", Value = "abc123" };
 
 		var httpOptions = Apply(Options(), new StubSource(credential));
 
-		// SignalR's own token path is bearer-only, so any other scheme is written to the request
-		// headers and no bearer token is yielded - the two must not both apply.
-		(await httpOptions.AccessTokenProvider!()).Should().BeNull();
-		httpOptions.Headers["Authorization"].Should().Be("ApiKey abc123");
+		var act = async () => await httpOptions.AccessTokenProvider!();
+
+		(await act.Should().ThrowAsync<InvalidOperationException>())
+			.WithMessage("*'ApiKey' scheme*")
+			.WithMessage("*AuthorizationHeader*");
 	}
 
 	// ---------------------------------------------------------------------

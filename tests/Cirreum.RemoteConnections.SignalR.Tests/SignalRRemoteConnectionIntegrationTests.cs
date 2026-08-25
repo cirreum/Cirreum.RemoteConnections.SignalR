@@ -25,8 +25,12 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 
 		internal static readonly ConcurrentBag<string?> SeenAppNames = [];
 
+		internal static readonly ConcurrentQueue<string?> SeenAuthorization = [];
+
 		public override Task OnConnectedAsync() {
-			SeenAppNames.Add(this.Context.GetHttpContext()?.Request.Headers["X-Cirreum-App-Name"]);
+			var request = this.Context.GetHttpContext()?.Request;
+			SeenAppNames.Add(request?.Headers["X-Cirreum-App-Name"]);
+			SeenAuthorization.Enqueue(request?.Headers.Authorization.ToString());
 			return base.OnConnectedAsync();
 		}
 
@@ -137,7 +141,8 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 
 	private EchoConnection CreateConnection(
 		out FaultSwitch fault,
-		Action<RemoteConnectionOptions>? configure = null) {
+		Action<RemoteConnectionOptions>? configure = null,
+		IServiceProvider? services = null) {
 
 		var options = new RemoteConnectionOptions("IntegrationApp", new Uri(this._server.BaseAddress, "hub")) {
 			AuthorizationHeader = AuthorizationHeaderSettings.None,
@@ -152,7 +157,7 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		fault = faultSwitch;
 
 		var context = SignalRRemoteConnectionContext.Create<EchoConnection>(
-			new ServiceCollection().BuildServiceProvider(),
+			services ?? new ServiceCollection().BuildServiceProvider(),
 			options,
 			builder => builder.WithUrl(options.EndpointUri, http => {
 				http.HttpMessageHandlerFactory = _ =>
@@ -332,6 +337,54 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		await connection.DisconnectAsync();
 
 		connection.State.Should().Be(RemoteConnectionState.Disconnected);
+	}
+
+	// Credentials across a reconnect ————————————————————————————
+
+	private sealed class CountingBearerSource : IRemoteConnectionCredentialSource {
+
+		private int _issued;
+
+		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
+			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) =>
+			ValueTask.FromResult<AuthorizationHeaderSettings?>(new AuthorizationHeaderSettings {
+				Scheme = "Bearer",
+				Value = $"token-{Interlocked.Increment(ref this._issued)}",
+			});
+
+	}
+
+	[Fact]
+	public async Task TheAmbientCredential_IsReResolvedOnReconnect() {
+
+		// The refresh-across-reconnects guarantee, asserted where it is actually observable: on
+		// the header the hub receives, not on the delegate the client installs.
+		EchoHub.SeenAuthorization.Clear();
+
+		var services = new ServiceCollection()
+			.AddSingleton<IRemoteConnectionCredentialSource>(new CountingBearerSource())
+			.BuildServiceProvider();
+
+		await using var connection = this.CreateConnection(
+			out var fault,
+			options => options.AuthorizationHeader = null,
+			services);
+
+		var (reconnecting, reconnected) = WatchReconnect(connection);
+
+		await connection.ConnectAsync();
+
+		await InduceFaultAsync(connection, fault);
+		await WaitForAsync(reconnecting);
+		fault.Faulting = false;
+		await WaitForAsync(reconnected);
+
+		var seen = EchoHub.SeenAuthorization.ToArray();
+		seen.Should().HaveCountGreaterThanOrEqualTo(2, "the hub is entered once per successful connect");
+		seen[0].Should().StartWith("Bearer token-");
+		seen[^1].Should().StartWith("Bearer token-");
+		seen[^1].Should().NotBe(seen[0], "a reconnect must present a freshly resolved credential");
+
 	}
 
 	// Reconnect —————————————————————————————————————————————————

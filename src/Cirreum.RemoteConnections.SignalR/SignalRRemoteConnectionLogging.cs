@@ -68,7 +68,7 @@ internal static partial class SignalRRemoteConnectionLogging {
 		EventId = 2007,
 		Level = LogLevel.Debug,
 		Message = "Remote connection {ConnectionId} resolved credentials using the {Posture} posture")]
-	internal static partial void LogTokenPosture(
+	internal static partial void LogCredentialPosture(
 		this ILogger logger,
 		string connectionId,
 		string posture);

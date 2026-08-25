@@ -38,8 +38,8 @@ internal static class RemoteConnectionCredentials {
 
 		// 1. An explicit callback wins outright.
 		if (options.CredentialProvider is { } callback) {
-			logger.LogTokenPosture(connectionId, "explicit callback");
-			ApplyResolved(httpOptions, options, logger, connectionId, ct => callback(ct));
+			logger.LogCredentialPosture(connectionId, "explicit callback");
+			ApplyResolved(httpOptions, options, ct => callback(ct));
 			return;
 		}
 
@@ -53,13 +53,13 @@ internal static class RemoteConnectionCredentials {
 
 		// 3. An explicit choice to connect without credentials.
 		if (header is not null) {
-			logger.LogTokenPosture(connectionId, "explicitly public");
+			logger.LogCredentialPosture(connectionId, "explicitly public");
 			return;
 		}
 
 		// 4. The ambient host source, resolved per attempt so that registration order between the
 		//    host runtime and this package cannot matter.
-		logger.LogTokenPosture(connectionId, "ambient credential source");
+		logger.LogCredentialPosture(connectionId, "ambient credential source");
 
 		var request = new RemoteConnectionTokenRequest {
 			EndpointUri = options.EndpointUri,
@@ -67,7 +67,7 @@ internal static class RemoteConnectionCredentials {
 			ConnectionType = connectionType,
 		};
 
-		ApplyResolved(httpOptions, options, logger, connectionId, async ct => {
+		ApplyResolved(httpOptions, options, async ct => {
 
 			var source = ResolveSource(services, connectionType)
 				?? throw new InvalidOperationException(
@@ -112,7 +112,7 @@ internal static class RemoteConnectionCredentials {
 		if (IsBearer(header)) {
 			// The native token path: SignalR places it as a header where the transport can carry
 			// one, and as an access_token query parameter where it cannot.
-			logger.LogTokenPosture(connectionId, "static bearer token");
+			logger.LogCredentialPosture(connectionId, "static bearer token");
 			var token = header.Value;
 			httpOptions.AccessTokenProvider = () => Task.FromResult<string?>(token);
 			return;
@@ -120,7 +120,8 @@ internal static class RemoteConnectionCredentials {
 
 		// A non-Bearer scheme has no query-parameter equivalent, so it can only travel as a
 		// header - which a browser cannot set on a WebSocket upgrade.
-		logger.LogTokenPosture(connectionId, $"static {header.Scheme} header");
+		var posture = $"static {header.Scheme} header";
+		logger.LogCredentialPosture(connectionId, posture);
 		WarnIfBrowser(options, logger);
 		httpOptions.Headers["Authorization"] = $"{header.Scheme} {header.Value}";
 
@@ -131,15 +132,15 @@ internal static class RemoteConnectionCredentials {
 	/// </summary>
 	/// <remarks>
 	/// A bearer credential rides SignalR's own token path, which re-reads it on every attempt and
-	/// places it where the negotiated transport can carry it. Any other scheme is written to the
-	/// request headers, which the client rebuilds per attempt, and the delegate then yields no
-	/// bearer token so the two cannot both apply.
+	/// places it where the negotiated transport can carry it. No other scheme can be resolved per
+	/// attempt: the transport copies its configured headers when it builds the client for an
+	/// attempt, before the token callback runs, so a header written from the callback reaches no
+	/// request. A non-Bearer credential is therefore supplied as a static authorization header,
+	/// which is applied before any client is built.
 	/// </remarks>
 	private static void ApplyResolved(
 		HttpConnectionOptions httpOptions,
 		RemoteConnectionOptions options,
-		ILogger logger,
-		string connectionId,
 		Func<CancellationToken, ValueTask<AuthorizationHeaderSettings?>> resolve) {
 
 		httpOptions.AccessTokenProvider = async () => {
@@ -153,18 +154,19 @@ internal static class RemoteConnectionCredentials {
 
 			// An explicit decision to present nothing.
 			if (!credential.HasValue) {
-				httpOptions.Headers.Remove("Authorization");
 				return null;
 			}
 
-			if (IsBearer(credential)) {
-				httpOptions.Headers.Remove("Authorization");
-				return credential.Value;
+			if (!IsBearer(credential)) {
+				throw new InvalidOperationException(
+					$"A resolved credential for the remote connection to '{options.EndpointUri}' uses the " +
+					$"'{credential.Scheme}' scheme. Only Bearer can be resolved per connect attempt on this " +
+					$"transport: it copies its configured headers when it builds the client for an attempt, " +
+					$"before the credential is resolved. Set a non-Bearer credential as a static " +
+					$"{nameof(RemoteConnectionOptions.AuthorizationHeader)} on the connection's options instead.");
 			}
 
-			WarnIfBrowser(options, logger);
-			httpOptions.Headers["Authorization"] = $"{credential.Scheme} {credential.Value}";
-			return null;
+			return credential.Value;
 
 		};
 
