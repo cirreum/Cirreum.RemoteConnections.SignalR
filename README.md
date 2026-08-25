@@ -47,21 +47,7 @@ public sealed class ChatConnection(SignalRRemoteConnectionContext context)
 }
 ```
 
-Register it. On a Cirreum application builder, `Cirreum.Runtime.RemoteConnections.SignalR` supplies
-the registration:
-
-```csharp
-builder.AddRemoteConnection<ChatConnection>(options => {
-    options.EndpointUri = new Uri("https://api.example.com/hubs/chat");
-});
-```
-
-That registers the connection as `ChatConnection` and as `IRemoteConnection`, and disposes it with
-the host. It also carries `AddRemoteConnectionFactory<TConnection>()` for connections belonging to a
-session rather than to the application — one per call, one per bridge.
-
-Composing the registration directly is supported for hosts that are not building through
-`IDomainApplicationBuilder`:
+Register it:
 
 ```csharp
 services.AddSingleton(sp => new ChatConnection(
@@ -73,8 +59,13 @@ services.AddSingleton(sp => new ChatConnection(
 services.AddSingleton<IRemoteConnection>(sp => sp.GetRequiredService<ChatConnection>());
 ```
 
-Either way, registration does not connect. Connect when the caller is ready — typically after
-sign-in, not at startup:
+Applications composing through a Cirreum application builder normally register through the matching
+Runtime Extensions package instead, which reduces the above to a single builder call and adds a
+per-session registration for connections that belong to one call or one bridge rather than to the
+application.
+
+Registration does not connect. Connect when the caller is ready — typically after sign-in, not at
+startup:
 
 ```csharp
 await connection.ConnectAsync();
