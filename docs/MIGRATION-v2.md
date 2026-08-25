@@ -1,7 +1,7 @@
 # Cirreum.RemoteConnections.SignalR v1 → v2 Migration
 
-v2 follows `Cirreum.Contracts` 5.0.0 and `Cirreum.Domain` 5.0.0. Three breaking changes, all
-mechanical, plus one behavioural change worth reading before deploying.
+v2 follows `Cirreum.Contracts` 5.0.0 and `Cirreum.Domain` 5.0.0. Three mechanical changes, plus two
+behavioural ones worth reading before deploying — neither is a compile error.
 
 ---
 
@@ -65,6 +65,26 @@ If a connection deliberately connects anonymously, say so: set `options.Authoriz
 `AuthorizationHeaderSettings.None`, or return it from the source. Relying on `null` to mean the same
 thing no longer works, and that is the point — the two were indistinguishable.
 
+## 5. ⚠️ A non-Bearer credential must be static
+
+**Also behavioural.**
+
+Only Bearer can be resolved per connect attempt. The transport copies its configured headers when it
+builds the client for an attempt, and the credential callback runs after that snapshot — so a
+non-Bearer credential resolved there reaches no request at all.
+
+In v1 that combination produced a connection carrying **no** `Authorization` header, silently. In v2
+it throws, naming the scheme and pointing at the posture that works.
+
+| Credential | v1 | v2 |
+| --- | --- | --- |
+| Bearer, from a callback or source | re-resolved per attempt | unchanged |
+| Non-Bearer, from a callback or source | silently absent | throws |
+| Non-Bearer, as a static `AuthorizationHeader` | travels as a header | unchanged |
+
+An ApiKey or similar credential goes on `options.AuthorizationHeader`, which is applied before any
+client is built.
+
 ## New capabilities
 
 ### Multi-argument callbacks
@@ -107,7 +127,4 @@ keyed to that type is preferred over the unkeyed one.
 - A bearer credential still rides SignalR's own token path, so it travels as a header where the
   transport can carry one and as an `access_token` query parameter where it cannot, re-resolved on
   every attempt.
-- A static non-Bearer `AuthorizationHeader` still travels as a header. What is new is that
-  returning a non-Bearer credential from a *callback or source* now throws: only Bearer can be
-  resolved per attempt, because the transport copies its headers before the callback runs. In v1
-  that combination produced a connection carrying no credential at all.
+- A static non-Bearer `AuthorizationHeader` still travels as a header, on every attempt.
