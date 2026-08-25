@@ -33,6 +33,12 @@ guides linked at the bottom of each entry.
   change from 1.0, where a source returning nothing connected anonymously and the server refused the
   request later, which reads as an application authentication bug.
 
+* **A non-Bearer credential must be a static `AuthorizationHeader`.** Only Bearer can be resolved
+  per connect attempt: the transport copies its configured headers when it builds the client for an
+  attempt, before the credential callback runs, so a non-Bearer credential resolved there would
+  reach no request. Returning one from a callback or an ambient source now throws, naming the scheme
+  and the posture to use instead, rather than connecting with no credential at all.
+
 ### Added
 
 * **`On<T1,T2>` through `On<T1..T8>`** — SignalR's protocol carries an argument array, so a hub

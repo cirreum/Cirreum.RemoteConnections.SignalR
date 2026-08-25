@@ -105,4 +105,9 @@ keyed to that type is preferred over the unkeyed one.
 - Reconnect policy, state reporting, `ConnectionId` / `ServerConnectionId`, `OnReconnectedAsync`,
   disposal, and the `configureTransport` escape hatch.
 - A bearer credential still rides SignalR's own token path, so it travels as a header where the
-  transport can carry one and as an `access_token` query parameter where it cannot.
+  transport can carry one and as an `access_token` query parameter where it cannot, re-resolved on
+  every attempt.
+- A static non-Bearer `AuthorizationHeader` still travels as a header. What is new is that
+  returning a non-Bearer credential from a *callback or source* now throws: only Bearer can be
+  resolved per attempt, because the transport copies its headers before the callback runs. In v1
+  that combination produced a connection carrying no credential at all.
