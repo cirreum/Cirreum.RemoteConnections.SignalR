@@ -346,7 +346,7 @@ public sealed class SignalRRemoteConnectionIntegrationTests : IAsyncLifetime {
 		private int _issued;
 
 		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
-			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) =>
+			RemoteConnectionCredentialRequest request, CancellationToken cancellationToken = default) =>
 			ValueTask.FromResult<AuthorizationHeaderSettings?>(new AuthorizationHeaderSettings {
 				Scheme = "Bearer",
 				Value = $"token-{Interlocked.Increment(ref this._issued)}",

@@ -47,10 +47,10 @@ public class RemoteConnectionCredentialsTests {
 
 	private sealed class StubSource(AuthorizationHeaderSettings? credential) : IRemoteConnectionCredentialSource {
 
-		public RemoteConnectionTokenRequest? LastRequest { get; private set; }
+		public RemoteConnectionCredentialRequest? LastRequest { get; private set; }
 
 		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
-			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) {
+			RemoteConnectionCredentialRequest request, CancellationToken cancellationToken = default) {
 
 			this.LastRequest = request;
 			return ValueTask.FromResult(credential);
@@ -210,7 +210,7 @@ public class RemoteConnectionCredentialsTests {
 
 	private sealed class CountingSource(Func<int> next) : IRemoteConnectionCredentialSource {
 		public ValueTask<AuthorizationHeaderSettings?> GetCredentialAsync(
-			RemoteConnectionTokenRequest request, CancellationToken cancellationToken = default) =>
+			RemoteConnectionCredentialRequest request, CancellationToken cancellationToken = default) =>
 			ValueTask.FromResult<AuthorizationHeaderSettings?>(
 				new AuthorizationHeaderSettings { Scheme = "Bearer", Value = $"token-{next()}" });
 	}

@@ -61,7 +61,7 @@ internal static class RemoteConnectionCredentials {
 		//    host runtime and this package cannot matter.
 		logger.LogCredentialPosture(connectionId, "ambient credential source");
 
-		var request = new RemoteConnectionTokenRequest {
+		var request = new RemoteConnectionCredentialRequest {
 			EndpointUri = options.EndpointUri,
 			Scopes = options.Scopes,
 			ConnectionType = connectionType,
