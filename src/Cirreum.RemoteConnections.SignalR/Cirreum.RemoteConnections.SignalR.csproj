@@ -9,7 +9,7 @@
 
 	<ItemGroup>
 		<!-- Cirreum.Contracts (+ Kernel/Result) flow in transitively via Cirreum.Domain. -->
-		<PackageReference Include="Cirreum.Domain" Version="5.0.0" />
+		<PackageReference Include="Cirreum.Domain" Version="5.0.1" />
 
 		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
 	</ItemGroup>
